@@ -1,0 +1,153 @@
+{
+  "name": "studio-code-editor",
+  "version": "1.0.0",
+  "description": "A modern, cross-platform code editor built with Tauri and React",
+  "author": {
+    "name": "Studio Team",
+    "email": "team@studio-editor.dev"
+  },
+  "homepage": "https://studio-editor.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/studio/code-editor"
+  },
+  "license": "MIT",
+  "keywords": [
+    "code-editor",
+    "tauri",
+    "react",
+    "typescript",
+    "codemirror",
+    "cross-platform"
+  ],
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "test": "vitest",
+    "lint": "eslint src",
+    "format": "prettier --write src"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.7.0",
+    "@tauri-apps/plugin-opener": "^2.4.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "codemirror": "^6.0.2",
+    "@codemirror/view": "^6.38.1",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/commands": "^6.8.1",
+    "@codemirror/search": "^6.5.11",
+    "@codemirror/autocomplete": "^6.18.6",
+    "@codemirror/lint": "^6.8.5",
+    "@codemirror/language": "^6.11.2",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "@codemirror/lang-javascript": "^6.2.4",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.9",
+    "@codemirror/lang-markdown": "^6.3.4",
+    "@uiw/react-codemirror": "^4.24.2",
+    "lucide-react": "^0.536.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.7.1",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "@tailwindcss/vite": "^4.1.11",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.6",
+    "@types/node": "^24.2.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.0.0",
+    "vitest": "^1.0.0"
+  },
+  "tauri": {
+    "targets": [
+      "universal-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "x86_64-unknown-linux-gnu"
+    ]
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
+  "browserslist": [
+    "defaults",
+    "not IE 11"
+  ],
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/studio"
+  },
+  "configuration": {
+    "editor": {
+      "defaultTheme": "dark",
+      "fontSize": 14,
+      "lineNumbers": true,
+      "wordWrap": false,
+      "minimap": true,
+      "autocompletion": true,
+      "bracketMatching": true,
+      "searchHighlight": true
+    },
+    "ui": {
+      "sidebarWidth": 250,
+      "showWelcomeScreen": true,
+      "recentFilesLimit": 10
+    },
+    "extensions": {
+      "enabled": true,
+      "autoUpdate": false,
+      "marketplace": "https://marketplace.studio-editor.dev"
+    }
+  },
+  "supportedLanguages": [
+    {
+      "name": "JavaScript",
+      "extensions": [".js", ".jsx", ".mjs"],
+      "codemirror": "@codemirror/lang-javascript"
+    },
+    {
+      "name": "TypeScript",
+      "extensions": [".ts", ".tsx"],
+      "codemirror": "@codemirror/lang-javascript"
+    },
+    {
+      "name": "Python",
+      "extensions": [".py", ".pyw"],
+      "codemirror": "@codemirror/lang-python"
+    },
+    {
+      "name": "JSON",
+      "extensions": [".json", ".jsonc"],
+      "codemirror": "@codemirror/lang-json"
+    },
+    {
+      "name": "CSS",
+      "extensions": [".css", ".scss", ".sass"],
+      "codemirror": "@codemirror/lang-css"
+    },
+    {
+      "name": "HTML",
+      "extensions": [".html", ".htm"],
+      "codemirror": "@codemirror/lang-html"
+    },
+    {
+      "name": "Markdown",
+      "extensions": [".md", ".markdown"],
+      "codemirror": "@codemirror/lang-markdown"
+    },
+    {
+      "name": "Rust",
+      "extensions": [".rs"],
+      "codemirror": "@codemirror/lang-rust"
+    }
+  ]
+}

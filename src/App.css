@@ -1,0 +1,24 @@
+/* Editor-specific styles */
+:root {
+  font-family: 'SF Pro Text', 'Segoe UI', Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 1rem; /* 16px base for consistency */
+  line-height: 1.4;
+  font-weight: 400;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* CodeMirror editor consistency */
+.cm-editor {
+  font-size: 0.85rem !important;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', monospace !important;
+}
+
+.cm-content, .cm-line {
+  font-size: 0.85rem !important;
+  font-family: inherit !important;
+}
