@@ -73,7 +73,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   activeFilePath,
   className,
 }) => {
-  const [fileTree, setFileTree] = useState<FileTreeNode[]>([]);
+  const [flatFileList, setFlatFileList] = useState<FileTreeNode[]>([]);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,8 +84,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       return files.map(file => ({
         ...file,
         level,
-        expanded: false,
-        children: file.is_directory ? [] : undefined,
+        expanded: expandedFolders.has(file.path),
+        children: undefined,
       }));
     } catch (err) {
       console.error('Failed to load directory:', err);
@@ -92,104 +93,113 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     }
   };
 
-  const toggleDirectory = async (node: FileTreeNode) => {
-    if (!node.is_directory) return;
-
-    const newTree = [...fileTree];
-    const targetNode = findNodeByPath(newTree, node.path);
+  const buildFlatList = async (rootPath: string): Promise<FileTreeNode[]> => {
+    const result: FileTreeNode[] = [];
     
-    if (!targetNode) return;
-
-    if (targetNode.expanded) {
-      targetNode.expanded = false;
-      targetNode.children = [];
-    } else {
-      targetNode.expanded = true;
-      setLoading(true);
-      try {
-        targetNode.children = await loadDirectory(node.path, node.level + 1);
-      } catch (err) {
-        setError(`Failed to load directory: ${err}`);
-      } finally {
-        setLoading(false);
+    const processDirectory = async (dirPath: string, level: number = 0) => {
+      const files = await loadDirectory(dirPath, level);
+      
+      for (const file of files) {
+        result.push(file);
+        
+        // If this directory is expanded, load its children
+        if (file.is_directory && expandedFolders.has(file.path)) {
+          await processDirectory(file.path, level + 1);
+        }
       }
-    }
-
-    setFileTree(newTree);
+    };
+    
+    await processDirectory(rootPath);
+    return result;
   };
 
-  const findNodeByPath = (nodes: FileTreeNode[], path: string): FileTreeNode | null => {
-    for (const node of nodes) {
-      if (node.path === path) {
-        return node;
+  const toggleDirectory = async (path: string) => {
+    setExpandedFolders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(path)) {
+        newSet.delete(path);
+      } else {
+        newSet.add(path);
       }
-      if (node.children) {
-        const found = findNodeByPath(node.children, path);
-        if (found) return found;
-      }
-    }
-    return null;
+      return newSet;
+    });
   };
 
-  const renderFileTree = (nodes: FileTreeNode[]): React.ReactNode => {
-    return nodes.map((node) => {
+  // Rebuild the flat list whenever expanded folders change
+  const refreshFileList = async () => {
+    if (!currentDirectory) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const newList = await buildFlatList(currentDirectory);
+      setFlatFileList(newList);
+    } catch (err) {
+      setError(`Failed to load directory: ${err}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderFileList = (): React.ReactNode => {
+    return flatFileList.map((node) => {
       const Icon = getFileIcon(node.name, node.is_directory);
-      const isExpanded = node.is_directory && node.expanded;
+      const isExpanded = node.is_directory && expandedFolders.has(node.path);
       
       return (
-        <div key={node.path}>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={() => {
-                if (node.is_directory) {
-                  toggleDirectory(node);
-                } else {
-                  onFileSelect(node.path);
-                }
-              }}
-              isActive={!node.is_directory && node.path === activeFilePath}
-              className={cn(
-                'w-full text-left',
-                !node.is_directory && 'text-muted-foreground'
+        <SidebarMenuItem key={node.path}>
+          <SidebarMenuButton
+            onClick={() => {
+              if (node.is_directory) {
+                toggleDirectory(node.path);
+              } else {
+                onFileSelect(node.path);
+              }
+            }}
+            isActive={!node.is_directory && node.path === activeFilePath}
+            className={cn(
+              'w-full text-left',
+              !node.is_directory && 'text-muted-foreground'
+            )}
+            style={{ paddingLeft: `${(node.level * 12) + 8}px` }}
+          >
+            <div className="flex items-center gap-2 w-full">
+              {node.is_directory && (
+                <span className="flex-shrink-0">
+                  {isExpanded ? (
+                    <ChevronDown className="h-3 w-3" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3" />
+                  )}
+                </span>
               )}
-              style={{ paddingLeft: `${(node.level * 12) + 8}px` }}
-            >
-              <div className="flex items-center gap-2 w-full">
-                {node.is_directory && (
-                  <span className="flex-shrink-0">
-                    {isExpanded ? (
-                      <ChevronDown className="h-3 w-3" />
-                    ) : (
-                      <ChevronRight className="h-3 w-3" />
-                    )}
-                  </span>
-                )}
-                <Icon className={cn(
-                  'flex-shrink-0',
-                  node.is_directory ? 'h-4 w-4' : 'h-3.5 w-3.5'
-                )} />
-                <span className="truncate text-sm">{node.name}</span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          {isExpanded && node.children && (
-            <div>{renderFileTree(node.children)}</div>
-          )}
-        </div>
+              <Icon className={cn(
+                'flex-shrink-0',
+                node.is_directory ? 'h-4 w-4' : 'h-3.5 w-3.5'
+              )} />
+              <span className="truncate text-sm">{node.name}</span>
+            </div>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
       );
     });
   };
 
   useEffect(() => {
     if (currentDirectory) {
-      setLoading(true);
-      setError(null);
-      loadDirectory(currentDirectory)
-        .then(setFileTree)
-        .catch(err => setError(`Failed to load directory: ${err}`))
-        .finally(() => setLoading(false));
+      refreshFileList();
+    } else {
+      setFlatFileList([]);
     }
   }, [currentDirectory]);
+
+  // Refresh when expanded folders change
+  useEffect(() => {
+    if (currentDirectory) {
+      refreshFileList();
+    }
+  }, [expandedFolders, currentDirectory]);
 
   return (
     <Sidebar className={cn('h-full', className)} variant="sidebar" collapsible="icon">
@@ -236,7 +246,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                 </SidebarMenuItem>
               )}
               
-              {!loading && !error && fileTree.length === 0 && currentDirectory && (
+              {!loading && !error && flatFileList.length === 0 && currentDirectory && (
                 <SidebarMenuItem>
                   <div className="px-3 py-2 text-xs text-sidebar-foreground/60 text-center">
                     Empty folder
@@ -254,7 +264,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                 </SidebarMenuItem>
               )}
               
-              {renderFileTree(fileTree)}
+              {renderFileList()}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
