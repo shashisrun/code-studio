@@ -12,6 +12,7 @@ import { CodeEditor } from "./components/CodeEditor";
 import { FileExplorer } from "./components/FileExplorer";
 import { Terminal } from "./components/Terminal";
 import { AppMenu } from "./components/AppMenu";
+import { CdpLogViewer } from "./components/CdpLogViewer";
 import { StatusBar } from "./components/StatusBar";
 import { EditorFile, getLanguageFromExtension } from "./types";
 import { tauriApi } from "./lib/tauri";
@@ -219,14 +220,22 @@ function App() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }, []);
 
+  // Minimal CDP log connect logic
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const connectToCdp = async () => {
+    setConnecting(true);
+    try {
+      await invoke("connect_cdp_websocket", { websiteUrl });
+    } catch (e) {
+      alert("Failed to connect to CDP: " + e);
+    }
+    setConnecting(false);
+  };
+
   return (
     <SidebarProvider defaultOpen={true}>
-      <div
-        className={cn(
-          "h-screen w-screen flex bg-background text-foreground overflow-hidden",
-          theme
-        )}
-      >
+      <div className={cn("h-screen w-screen flex bg-background text-foreground overflow-hidden", theme)}>
         <AppMenu
           openFiles={openFiles}
           activeFile={activeFile}
@@ -241,16 +250,29 @@ function App() {
           showTerminal={showTerminal}
           onToggleTerminal={onToggleTerminal}
         />
-
-        {/* Sidebar */}
         <FileExplorer
           onFileSelect={openFile}
           currentDirectory={currentDirectory}
           activeFilePath={activeFile?.path}
         />
-
-        {/* Main Content */}
         <SidebarInset className="flex-1 flex flex-col">
+          {/* Minimal CDP log viewer and connect UI */}
+          <div className="p-2 border-b bg-muted/10 flex items-center gap-2">
+            <input
+              type="text"
+              value={websiteUrl}
+              onChange={e => setWebsiteUrl(e.target.value)}
+              placeholder="http://localhost:3000"
+              className="px-2 py-1 rounded border text-xs w-[28rem] bg-background border-border"
+              disabled={connecting}
+            />
+            <Button size="sm" onClick={connectToCdp} disabled={connecting || !websiteUrl}>
+              {connecting ? "Connecting..." : "Connect to CDP"}
+            </Button>
+          </div>
+          <div className="p-2 border-b">
+            <CdpLogViewer />
+          </div>
           <div className="flex-1 flex flex-row h-full">
             <div className="flex-1 flex flex-col h-full">
               <div className="h-full flex flex-col">
@@ -259,15 +281,12 @@ function App() {
                   <SidebarTrigger className="-ml-1" />
                   <div className="flex-1" />
                 </header>
-
                 {/* Tab Bar */}
                 {openFiles.length > 0 && (
                   <div className="bg-muted/10 border-b border-border/30">
                     <Tabs
                       value={activeFileIndex.toString()}
-                      onValueChange={(value) =>
-                        setActiveFileIndex(parseInt(value))
-                      }
+                      onValueChange={value => setActiveFileIndex(parseInt(value))}
                     >
                       <TabsList className="h-[2.25rem] p-0 bg-transparent border-none rounded-none w-full justify-start">
                         {openFiles.map((file, index) => (
@@ -287,7 +306,7 @@ function App() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-[1.25rem] w-[1.25rem] p-0 ml-auto flex-shrink-0 hover:bg-destructive/15 hover:text-destructive rounded opacity-0 group-hover:opacity-100 transition-all duration-150"
-                                onClick={(e) => {
+                                onClick={e => {
                                   e.stopPropagation();
                                   closeFile(index);
                                 }}
@@ -301,15 +320,10 @@ function App() {
                     </Tabs>
                   </div>
                 )}
-
                 {/* Editor and Terminal */}
                 <div className="flex-1 flex flex-col overflow-hidden">
                   {/* Editor */}
-                  <div
-                    className={cn(
-                      "flex-1 overflow-auto",
-                      showTerminal && "flex-[3]"
-                    )}
+                  <div className={cn("flex-1 overflow-auto", showTerminal && "flex-[3]")}
                   >
                     {activeFile ? (
                       <CodeEditor
@@ -325,25 +339,17 @@ function App() {
                       <div className="h-full flex items-center justify-center text-muted-foreground">
                         <div className="text-center max-w-md">
                           <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                          <h3 className="text-lg font-medium mb-2 text-foreground/80">
-                            No files open
-                          </h3>
-                          <p className="text-sm mb-4 text-muted-foreground">
-                            Open a file or folder to get started
-                          </p>
+                          <h3 className="text-lg font-medium mb-2 text-foreground/80">No files open</h3>
+                          <p className="text-sm mb-4 text-muted-foreground">Open a file or folder to get started</p>
                           <div className="text-xs text-muted-foreground/70 space-y-1">
                             <p>
                               File → Open File (
-                              <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">
-                                ⌘O
-                              </kbd>
+                              <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘O</kbd>
                               )
                             </p>
                             <p>
                               File → Open Folder (
-                              <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">
-                                ⌘⇧O
-                              </kbd>
+                              <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘⇧O</kbd>
                               )
                             </p>
                           </div>
@@ -351,7 +357,6 @@ function App() {
                       </div>
                     )}
                   </div>
-
                   {/* Terminal Panel */}
                   {showTerminal && (
                     <div className="flex-1 border-t">
