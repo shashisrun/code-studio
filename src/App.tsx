@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { 
   FileText, 
   X
@@ -9,10 +9,12 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/s
 import { cn } from '@/lib/utils';
 import { CodeEditor } from './components/CodeEditor';
 import { FileExplorer } from './components/FileExplorer';
+import { Terminal } from './components/Terminal';
 import { AppMenu } from './components/AppMenu';
 import { StatusBar } from './components/StatusBar';
 import { EditorFile, getLanguageFromExtension } from './types';
 import { tauriApi } from './lib/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import './App.css';
 
 function App() {
@@ -20,8 +22,32 @@ function App() {
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [currentDirectory, setCurrentDirectory] = useState<string>();
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [showTerminal, setShowTerminal] = useState(false);
 
   const activeFile = openFiles[activeFileIndex];
+
+  const onToggleTerminal = useCallback(() => {
+    setShowTerminal((prev) => !prev);
+  }, []);
+
+  // Global cleanup on app close
+  useEffect(() => {
+    const handleAppClose = async () => {
+      try {
+        await invoke('cleanup_all_terminals');
+        await invoke('cleanup_dev_ports');
+      } catch (error) {
+        console.error('App cleanup error:', error);
+      }
+    };
+
+    // Listen for app close events
+    window.addEventListener('beforeunload', handleAppClose);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleAppClose);
+    };
+  }, []);
 
   const openFile = useCallback(async (filePath: string) => {
     try {
@@ -183,6 +209,8 @@ function App() {
           onNewFile={newFile}
           onToggleTheme={toggleTheme}
           theme={theme}
+          showTerminal={showTerminal}
+          onToggleTerminal={onToggleTerminal}
         />
         
         {/* Sidebar */}
@@ -241,31 +269,45 @@ function App() {
               </div>
             )}
 
-            {/* Editor */}
-            <div className="flex-1 overflow-auto">
-              {activeFile ? (
-                <CodeEditor
-                  value={activeFile.content}
-                  onChange={updateFileContent}
-                  language={activeFile.language}
-                  theme={theme}
-                  onSave={() => saveFile()}
-                  height="100%"
-                  className="w-full h-full"
-                />
-              ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  <div className="text-center max-w-md">
-                    <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                    <h3 className="text-lg font-medium mb-2 text-foreground/80">No files open</h3>
-                    <p className="text-sm mb-4 text-muted-foreground">
-                      Open a file or folder to get started
-                    </p>
-                    <div className="text-xs text-muted-foreground/70 space-y-1">
-                      <p>File → Open File (<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘O</kbd>)</p>
-                      <p>File → Open Folder (<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘⇧O</kbd>)</p>
+            {/* Editor and Terminal */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Editor */}
+              <div className={cn("flex-1 overflow-auto", showTerminal && "flex-[3]")}>
+                {activeFile ? (
+                  <CodeEditor
+                    value={activeFile.content}
+                    onChange={updateFileContent}
+                    language={activeFile.language}
+                    theme={theme}
+                    onSave={() => saveFile()}
+                    height="100%"
+                    className="w-full h-full"
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    <div className="text-center max-w-md">
+                      <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                      <h3 className="text-lg font-medium mb-2 text-foreground/80">No files open</h3>
+                      <p className="text-sm mb-4 text-muted-foreground">
+                        Open a file or folder to get started
+                      </p>
+                      <div className="text-xs text-muted-foreground/70 space-y-1">
+                        <p>File → Open File (<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘O</kbd>)</p>
+                        <p>File → Open Folder (<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘⇧O</kbd>)</p>
+                      </div>
                     </div>
                   </div>
+                )}
+              </div>
+              
+              {/* Terminal Panel */}
+              {showTerminal && (
+                <div className="flex-1 border-t">
+                  <Terminal 
+                    workingDirectory={currentDirectory}
+                    theme={theme}
+                    className="h-full"
+                  />
                 </div>
               )}
             </div>

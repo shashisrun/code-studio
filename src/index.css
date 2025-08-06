@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Xterm.css now imported directly in main.tsx */
 
 @custom-variant dark (&:is(.dark *));
 

@@ -12,7 +12,9 @@ interface AppMenuProps {
   onCloseFile: () => void;
   onNewFile: () => void;
   onToggleTheme: () => void;
+  onToggleTerminal: () => void;
   theme: 'light' | 'dark';
+  showTerminal: boolean;
 }
 
 export function AppMenu({
@@ -25,7 +27,9 @@ export function AppMenu({
   onCloseFile,
   onNewFile,
   onToggleTheme,
-  theme
+  onToggleTerminal,
+  theme,
+  showTerminal
 }: AppMenuProps) {
   useEffect(() => {
     const createMenu = async () => {
@@ -116,12 +120,20 @@ export function AppMenu({
           action: onToggleTheme,
         });
 
+        const toggleTerminalItem = await MenuItem.new({
+          id: 'toggle_terminal',
+          text: `${showTerminal ? 'Hide' : 'Show'} Terminal`,
+          accelerator: 'CmdOrCtrl+`',
+          action: onToggleTerminal,
+        });
+
         const viewSeparator = await PredefinedMenuItem.new({ item: 'Separator' });
 
         const viewSubmenu = await Submenu.new({
           text: 'View',
           items: [
             toggleThemeItem,
+            toggleTerminalItem,
             viewSeparator,
           ],
         });
@@ -230,6 +242,7 @@ File:
 View:
 • Toggle Sidebar: Ctrl/Cmd+B
 • Toggle Theme: Ctrl/Cmd+Shift+T
+• Toggle Terminal: Ctrl/Cmd+\`
 
 Edit:
 • Find: Ctrl/Cmd+F
@@ -265,7 +278,6 @@ Window:
 
         // Set as app menu
         await menu.setAsAppMenu();
-        console.log('Native menu created successfully');
 
       } catch (error) {
         console.error('Failed to create menu:', error);
@@ -277,6 +289,7 @@ Window:
     openFiles,
     activeFile,
     theme,
+    showTerminal,
     onOpenFile,
     onOpenFolder,
     onSaveFile,
@@ -284,6 +297,7 @@ Window:
     onCloseFile,
     onNewFile,
     onToggleTheme,
+    onToggleTerminal,
   ]);
 
   // This component doesn't render anything visible

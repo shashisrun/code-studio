@@ -7,7 +7,13 @@
   ],
   "permissions": [
     "core:default",
-    "opener:default",
-    "dialog:default"
+    "opener:default", 
+    "dialog:default",
+    "pty:allow-spawn",
+    "pty:allow-exitstatus",
+    "pty:allow-read",
+    "pty:allow-resize",
+    "pty:allow-write",
+    "pty:allow-kill"
   ]
 }
