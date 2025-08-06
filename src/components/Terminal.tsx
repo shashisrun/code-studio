@@ -32,10 +32,29 @@ interface TerminalSession {
 }
 
 export const Terminal: React.FC<TerminalProps> = ({
-  workingDirectory = '/',
+  workingDirectory,
   className,
   theme = 'dark',
 }) => {
+  // Detect user's home directory using Tauri API
+  const [homeDir, setHomeDir] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // Use Tauri's path API to get home directory
+        const { homeDir } = await import('@tauri-apps/api/path');
+        const dir = await homeDir();
+        console.log('Home directory:', dir);
+        setHomeDir(dir);
+      } catch (e) {
+        setHomeDir('/');
+      }
+    })();
+  }, []);
+
+  const effectiveWorkingDirectory = workingDirectory || homeDir || '/';
+
   const [tabs, setTabs] = useState<TerminalSession[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [terminalHeight, setTerminalHeight] = useState(300);
@@ -62,9 +81,12 @@ export const Terminal: React.FC<TerminalProps> = ({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isResizing && resizeRef.current) {
-        const rect = resizeRef.current.getBoundingClientRect();
-        const newHeight = Math.max(200, Math.min(600, e.clientY - rect.top + terminalHeight));
-        setTerminalHeight(newHeight);
+        const parentRect = resizeRef.current.parentElement?.getBoundingClientRect();
+        if (parentRect) {
+          // Calculate new height from mouse position relative to top of parent
+          const newHeight = Math.max(200, Math.min(600, parentRect.bottom - e.clientY));
+          setTerminalHeight(newHeight);
+        }
       }
     };
 
@@ -95,9 +117,12 @@ export const Terminal: React.FC<TerminalProps> = ({
     }
   }, [activeTabId]);
 
+  // Example: get font size from CSS variable or app context
+  const fontSize = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size')) || 13;
+
   const createSession = useCallback(async () => {
     const session: TerminalSession = await invoke('create_terminal_session', {
-      workingDirectory,
+      workingDirectory: effectiveWorkingDirectory,
     });
 
     const tabId = session.id;
@@ -108,7 +133,7 @@ export const Terminal: React.FC<TerminalProps> = ({
         cursor: theme === 'dark' ? '#ffffff' : '#000000',
       },
       fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-      fontSize: 13,
+      fontSize,
       cursorBlink: true,
     });
     const fitAddon = new FitAddon();
@@ -127,7 +152,7 @@ export const Terminal: React.FC<TerminalProps> = ({
 
     setTabs((prev) => [...prev, session]);
     setActiveTabId(tabId);
-  }, [workingDirectory, theme]);
+  }, [effectiveWorkingDirectory, theme]);
 
   useEffect(() => {
     const unlisten = listen('terminal-data', (event) => {
@@ -199,6 +224,16 @@ export const Terminal: React.FC<TerminalProps> = ({
       )}
       style={{ height: `${terminalHeight}px` }}
     >
+      {/* Resize Handle (move to top) */}
+      <div
+        className="h-2 bg-muted/20 hover:bg-muted/40 cursor-row-resize flex items-center justify-center border-b"
+        style={{ position: 'relative', zIndex: 10 }}
+        onMouseDown={() => setIsResizing(true)}
+      >
+        <GripHorizontal className="h-3 w-3 text-muted-foreground" />
+      </div>
+
+      {/* Terminal Header */}
       <div className="flex items-center justify-between p-2 border-b bg-muted/10 flex-shrink-0">
         <div className="flex items-center gap-2">
           <TerminalIcon className="h-4 w-4" />
@@ -221,6 +256,7 @@ export const Terminal: React.FC<TerminalProps> = ({
         </div>
       </div>
 
+      {/* Terminal Tabs */}
       {tabs.length > 1 && (
         <div className="flex items-center gap-1 p-1 border-b bg-muted/5 flex-shrink-0">
           {tabs.map((tab) => (
@@ -249,16 +285,17 @@ export const Terminal: React.FC<TerminalProps> = ({
         </div>
       )}
 
-      <div className="flex-1 overflow-hidden relative">
+      {/* Terminal Container (stick to bottom, fill remaining space above status bar) */}
+      <div className="flex-1 overflow-hidden relative" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
         {tabs.map((tab) => (
           <div
             key={tab.id}
             ref={(el) => { containerRefs.current[tab.id] = el; }}
             style={{
               width: '100%',
-              height: `${terminalHeight - 100}px`,
+              height: "100%",
               position: 'absolute',
-              top: 0,
+              bottom: 0,
               left: 0,
               zIndex: tab.id === activeTabId ? 2 : 1,
               opacity: tab.id === activeTabId ? 1 : 0,
@@ -268,13 +305,7 @@ export const Terminal: React.FC<TerminalProps> = ({
           />
         ))}
       </div>
-
-      <div
-        className="h-2 bg-muted/20 hover:bg-muted/40 cursor-row-resize flex items-center justify-center border-t"
-        onMouseDown={() => setIsResizing(true)}
-      >
-        <GripHorizontal className="h-3 w-3 text-muted-foreground" />
-      </div>
+      {/* Status bar would go here, below terminal container */}
     </div>
   );
 };

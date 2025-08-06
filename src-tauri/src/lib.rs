@@ -65,8 +65,16 @@ async fn create_terminal_session(
         pixel_height: 0,
     }).map_err(|e| format!("PTY error: {}", e))?;
 
-    let mut cmd = CommandBuilder::new("/bin/bash");
+    // Detect OS and set default shell
+    #[cfg(target_os = "macos")]
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    #[cfg(target_os = "linux")]
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+    #[cfg(target_os = "windows")]
+    let shell = "powershell.exe".to_string();
+    let mut cmd = CommandBuilder::new(shell);
     cmd.env("TERM", "xterm-256color");
+    cmd.cwd(&working_directory);
 
     pair.slave.spawn_command(cmd).map_err(|e| format!("Failed spawning shell: {}", e))?;
 
