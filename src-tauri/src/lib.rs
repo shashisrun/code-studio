@@ -498,13 +498,29 @@ fn greet(name: &str) -> String {
 fn detect_default_shell() -> String {
     #[cfg(unix)]
     {
-        // Use $SHELL env var, fallback to /bin/bash
-        std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
+        use std::path::Path;
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+        if Path::new(&shell).exists() {
+            shell
+        } else if Path::new("/bin/bash").exists() {
+            "/bin/bash".to_string()
+        } else if Path::new("/bin/zsh").exists() {
+            "/bin/zsh".to_string()
+        } else {
+            "/bin/sh".to_string()
+        }
     }
     #[cfg(windows)]
     {
-        // Use ComSpec env var, fallback to cmd.exe
-        std::env::var("ComSpec").unwrap_or_else(|_| "cmd.exe".to_string())
+        use std::path::Path;
+        let comspec = std::env::var("ComSpec").unwrap_or_else(|_| "C:\\Windows\\System32\\cmd.exe".to_string());
+        if Path::new(&comspec).exists() {
+            comspec
+        } else if Path::new("C:\\Windows\\System32\\cmd.exe").exists() {
+            "C:\\Windows\\System32\\cmd.exe".to_string()
+        } else {
+            "cmd.exe".to_string()
+        }
     }
 }
 

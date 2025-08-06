@@ -36,27 +36,25 @@ export const Terminal: React.FC<TerminalProps> = ({
   className,
   theme = 'dark'
 }) => {
-  const [sessions, setSessions] = useState<TerminalSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  // Only store tab metadata and active tab in state
+  const [tabs, setTabs] = useState<{ id: string; name: string; workingDirectory: string }[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [terminalHeight, setTerminalHeight] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
-  const terminalContainerRef = useRef<HTMLDivElement>(null);
+  // Store XTerm/PTY instances in refs
+  const terminalsRef = useRef<{ [id: string]: { xterm: XTerm; fitAddon: FitAddon; pty: IPty } }>({});
+  const containerRefs = useRef<{ [id: string]: HTMLDivElement | null }>({});
   const resizeRef = useRef<HTMLDivElement>(null);
 
-  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const activeSession = activeTabId ? terminalsRef.current[activeTabId] : undefined;
 
   // Cleanup terminals on component unmount
   useEffect(() => {
     const handleBeforeUnload = async () => {
       try {
-        // Cleanup all xterm instances
-        sessions.forEach(session => {
-          if (session.pty) {
-            session.pty.kill();
-          }
-          if (session.xterm) {
-            session.xterm.dispose();
-          }
+        Object.values(terminalsRef.current).forEach(({ pty, xterm }) => {
+          pty?.kill();
+          xterm?.dispose();
         });
         await invoke('cleanup_all_terminals');
       } catch (error) {
@@ -65,12 +63,11 @@ export const Terminal: React.FC<TerminalProps> = ({
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
-    
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       handleBeforeUnload();
     };
-  }, [sessions]);
+  }, []);
 
   // Handle resize functionality
   useEffect(() => {
@@ -98,33 +95,32 @@ export const Terminal: React.FC<TerminalProps> = ({
   }, [isResizing, terminalHeight]);
 
   // Fit terminal when container size changes
-  useEffect(() => {
-    if (activeSession?.fitAddon && terminalContainerRef.current) {
+useEffect(() => {
+  if (activeTabId && terminalsRef.current[activeTabId]) {
+    const { fitAddon } = terminalsRef.current[activeTabId];
+    const container = containerRefs.current[activeTabId];
+    if (container) {
       const resizeObserver = new ResizeObserver(() => {
         setTimeout(() => {
-          activeSession.fitAddon?.fit();
+          fitAddon?.fit();
         }, 0);
       });
-      
-      resizeObserver.observe(terminalContainerRef.current);
+      resizeObserver.observe(container);
       return () => resizeObserver.disconnect();
     }
-  }, [activeSession]);
+  }
+}, [activeTabId]);
 
   // Create a new terminal session
-
   const createSession = useCallback(async () => {
     try {
-      console.log('Creating new terminal session...');
-      const sessionId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      // Detect default shell from backend
+      const tabId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       let shell = '/bin/bash';
       try {
         shell = await invoke<string>('detect_default_shell');
       } catch (err) {
         console.warn('Failed to detect shell, falling back to /bin/bash or cmd.exe:', err);
       }
-      // Create XTerm instance
       const xterm = new XTerm({
         theme: {
           background: theme === 'dark' ? '#000000' : '#ffffff',
@@ -141,7 +137,6 @@ export const Terminal: React.FC<TerminalProps> = ({
       xterm.loadAddon(fitAddon);
       const webLinksAddon = new WebLinksAddon();
       xterm.loadAddon(webLinksAddon);
-      // Use detected shell for PTY
       const pty = spawn(shell, [], {
         name: 'xterm-color',
         cols: 80,
@@ -149,111 +144,88 @@ export const Terminal: React.FC<TerminalProps> = ({
         cwd: workingDirectory,
         env: {},
       });
-      // Connect PTY to XTerm
       pty.onData((data: string) => {
         xterm.write(data);
       });
       pty.onExit(({ exitCode }) => {
         xterm.write(`\r\n\r\nProcess exited with code ${exitCode}\r\n`);
       });
-      // Connect XTerm input to PTY
       xterm.onData((data) => {
         pty.write(data);
       });
-      // Handle terminal resize
       xterm.onResize(({ cols, rows }) => {
         pty.resize(cols, rows);
       });
-      const newSession: TerminalSession = {
-        id: sessionId,
-        name: `Terminal ${sessions.length + 1}`,
-        isActive: true,
-        workingDirectory: workingDirectory,
-        xterm,
-        fitAddon,
-        pty,
-      };
-      setSessions(prev => [
-        ...prev.map(s => ({ ...s, isActive: false })),
-        newSession
-      ]);
-      setActiveSessionId(newSession.id);
+      terminalsRef.current[tabId] = { xterm, fitAddon, pty };
+      setTabs(prev => [...prev, { id: tabId, name: `Terminal ${prev.length + 1}`, workingDirectory }]);
+      setActiveTabId(tabId);
     } catch (error) {
       console.error('Failed to create terminal session:', error);
     }
-  }, [sessions.length, workingDirectory, theme]);
+  }, [workingDirectory, theme]);
 
 
   // Close a terminal session
-  const closeSession = useCallback(async (sessionId: string) => {
+  const closeSession = useCallback(async (tabId: string) => {
     try {
-      const sessionToClose = sessions.find(s => s.id === sessionId);
-      
-      if (sessionToClose) {
-        // Cleanup PTY
-        if (sessionToClose.pty) {
-          sessionToClose.pty.kill();
-        }
-        
-        // Cleanup XTerm
-        if (sessionToClose.xterm) {
-          sessionToClose.xterm.dispose();
-        }
-        
+      const term = terminalsRef.current[tabId];
+      if (term) {
+        term.pty?.kill();
+        term.xterm?.dispose();
+        delete terminalsRef.current[tabId];
       }
     } catch (error) {
       console.error('Failed to close terminal session:', error);
     }
-
-    setSessions(prev => {
-      const filtered = prev.filter(s => s.id !== sessionId);
-      if (filtered.length === 0) {
-        return [];
+    setTabs(prev => {
+      const filtered = prev.filter(t => t.id !== tabId);
+      if (filtered.length === 0) return [];
+      if (tabId === activeTabId) {
+        setActiveTabId(filtered[filtered.length - 1]?.id ?? null);
       }
-      
-      if (sessionId === activeSessionId) {
-        const newActive = filtered[filtered.length - 1];
-        newActive.isActive = true;
-        setActiveSessionId(newActive.id);
-      }
-      
       return filtered;
     });
-
-    if (sessions.length === 1) {
-      setActiveSessionId(null);
+    if (tabs.length === 1) {
+      setActiveTabId(null);
     }
-  }, [sessions, activeSessionId]);
+  }, [activeTabId, tabs.length]);
 
   // Mount XTerm to DOM when active session changes
-  useEffect(() => {
-    if (activeSession?.xterm && terminalContainerRef.current) {
-      // Clear the container
-      terminalContainerRef.current.innerHTML = '';
-      
-      // Mount the terminal
-      activeSession.xterm.open(terminalContainerRef.current);
-      
-      // Fit the terminal
+
+  // Attach XTerm to its container only if not already attached
+useEffect(() => {
+  tabs.forEach(tab => {
+    const container = containerRefs.current[tab.id];
+    const term = terminalsRef.current[tab.id];
+    if (term && container && container.childNodes.length === 0) {
+      term.xterm.open(container);
+    }
+  });
+  if (activeTabId && terminalsRef.current[activeTabId]) {
+    const { xterm, fitAddon } = terminalsRef.current[activeTabId];
+    const container = containerRefs.current[activeTabId];
+    if (container) {
       setTimeout(() => {
-        activeSession.fitAddon?.fit();
+        xterm.refresh(0, xterm.rows - 1);
+        fitAddon?.fit();
+        xterm.scrollToBottom();
+        xterm.resize(xterm.cols, xterm.rows);
       }, 0);
     }
-  }, [activeSession]);
+  }
+}, [tabs, terminalHeight, activeTabId]);
 
   // Initialize with first session
   useEffect(() => {
-    console.log('Terminal useEffect triggered, sessions.length:', sessions.length);
-    if (sessions.length === 0) {
-      console.log('Creating initial terminal session');
+    if (tabs.length === 0) {
       createSession();
     }
-  }, []);
+  }, [tabs.length, createSession]);
 
   // Debug effect to log sessions changes
   useEffect(() => {
-    console.log('Sessions changed:', sessions);
-  }, [sessions]);
+    console.log('Tabs changed:', tabs);
+  }, [tabs]);
 
   return (
     <div 
@@ -267,23 +239,21 @@ export const Terminal: React.FC<TerminalProps> = ({
           <TerminalIcon className="h-4 w-4" />
           <span className="text-sm font-medium">Terminal</span>
         </div>
-        
         <div className="flex items-center gap-1">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={createSession}
-        className="h-8 w-8 p-0"
-        title="New Terminal"
-      >
-        <Plus className="h-3 w-3" />
-      </Button>
-          
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={createSession}
+            className="h-8 w-8 p-0"
+            title="New Terminal"
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => activeSession?.xterm?.clear()}
-            disabled={!activeSessionId}
+            disabled={!activeSession}
             className="h-8 w-8 p-0"
             title="Clear Terminal"
           >
@@ -293,28 +263,28 @@ export const Terminal: React.FC<TerminalProps> = ({
       </div>
 
       {/* Terminal Tabs */}
-      {sessions.length > 1 && (
+      {tabs.length > 1 && (
         <div className="flex items-center gap-1 p-1 border-b bg-muted/5 flex-shrink-0">
-          {sessions.map((session) => (
+          {tabs.map((tab) => (
             <div
-              key={session.id}
+              key={tab.id}
               className={cn(
                 'flex items-center gap-2 px-3 py-1 rounded text-xs cursor-pointer',
-                session.id === activeSessionId 
+                tab.id === activeTabId 
                   ? 'bg-background border' 
                   : 'hover:bg-muted/10',
               )}
-              onClick={() => setActiveSessionId(session.id)}
+              onClick={() => setActiveTabId(tab.id)}
             >
               <span className="flex items-center gap-1">
-                <span className="truncate max-w-[100px]">{session.name}</span>
+                <span className="truncate max-w-[100px]">{tab.name}</span>
               </span>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  closeSession(session.id);
+                  closeSession(tab.id);
                 }}
                 className="h-4 w-4 p-0 hover:bg-destructive/20"
               >
@@ -326,15 +296,26 @@ export const Terminal: React.FC<TerminalProps> = ({
       )}
 
       {/* Terminal Container */}
-      <div className="flex-1 overflow-hidden">
-        <div 
-          ref={terminalContainerRef}
-          className="w-full h-full"
-          style={{ 
-            height: `${terminalHeight - 100}px` // Account for header and resize handle
-          }}
-        />
-        {sessions.length === 0 && (
+      <div className="flex-1 overflow-hidden" style={{ position: 'relative' }}>
+        {tabs.map(tab => (
+          <div
+            key={tab.id}
+            ref={el => { containerRefs.current[tab.id] = el; }}
+            style={{
+              width: '100%',
+              height: `${terminalHeight - 100}px`,
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              zIndex: tab.id === activeTabId ? 2 : 1,
+              opacity: tab.id === activeTabId ? 1 : 0,
+              pointerEvents: tab.id === activeTabId ? 'auto' : 'none',
+              transition: 'opacity 0.2s',
+            }}
+            className="w-full h-full"
+          />
+        ))}
+        {tabs.length === 0 && (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             Initializing terminal...
           </div>
