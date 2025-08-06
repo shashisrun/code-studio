@@ -210,10 +210,10 @@ export const Terminal: React.FC<TerminalProps> = ({
   }, [tabs, terminalHeight, activeTabId]);
 
   useEffect(() => {
-    if (tabs.length === 0) {
+    if (tabs.length === 0 && homeDir) {
       createSession();
     }
-  }, [tabs.length, createSession]);
+  }, [tabs.length, createSession, homeDir]);
 
   return (
     <div
